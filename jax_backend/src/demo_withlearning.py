@@ -67,7 +67,7 @@ def run(
     simulation_history  = run_single_simulation(init_state, n_timesteps, genmodel, genproc, meta_params, returns = vars2return, learning=True, learning_args=learning_args)
 
     if save:
-        np.savez(f'sim_hist_key{init_key_num}.npz', r=jnp.permute(simulation_history[0], (2, 1, 0)), v=jnp.permute(simulation_history[1], (2, 1, 0)))
+        np.savez(f'sim_hist_key{init_key_num}.npz', r=simulation_history[0], v=simulation_history[1])
     else:
         position_history, sz_history = simulation_history[0], simulation_history[1]['s_z']
         

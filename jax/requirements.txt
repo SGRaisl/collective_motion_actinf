@@ -1,4 +1,0 @@
-matplotlib>=3.4.0
-networkx
-funcy
-jax-md

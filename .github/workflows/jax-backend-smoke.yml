@@ -1,0 +1,43 @@
+name: jax-backend-smoke
+
+on:
+  push:
+    paths:
+      - ".github/workflows/jax-backend-smoke.yml"
+      - "jax_backend/**"
+      - "README.md"
+  pull_request:
+    paths:
+      - ".github/workflows/jax-backend-smoke.yml"
+      - "jax_backend/**"
+      - "README.md"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: jax_backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies (CPU + dev)
+        run: uv sync --group cpu --group dev --frozen --python ${{ matrix.python-version }}
+
+      - name: Run smoke tests
+        env:
+          MPLBACKEND: Agg
+        run: uv run pytest

@@ -28,13 +28,16 @@ def run(
     # set up some global parameters
     key = random.PRNGKey(init_key_num)
     init_dict = get_default_inits(N, T, dt, n_sectors=n_sectors, sector_angle=sector_angle)
-    if init_dict_override is not None:
-        init_dict = merge(init_dict, init_dict_override)
+    if init_dict_override is None:
+        init_dict_override = {}
+    init_dict = merge(init_dict, init_dict_override)
     
     # initialize generative model, generative process, and meta parameters related to learning and inference
     pos, vel, genproc, new_key = init_gen_process(key, init_dict)
     genmodel = init_genmodel(init_dict)
 
+    if meta_params_override is None:
+        meta_params_override = {}
     meta_params = initialize_meta_params(**meta_params_override)
 
     # initialize first beliefs using priors over hidden states
@@ -148,5 +151,4 @@ if __name__ == '__main__':
     common_args = {k:v for k,v in vars(args).items() if k in ['init_key_num', 'N', 'T', 'dt', 'n_sectors', 'sector_angle', 'last_T_seconds', 'save']}
     
     run(**common_args, init_dict_override=init_dict_override, meta_params_override=meta_params_override)
-
 
