@@ -17,13 +17,13 @@ cd /Users/conorheins/Documents/collective_motion_actinf/jax_backend
 ### CPU setup
 
 ```bash
-uv sync --group cpu --group dev
+uv sync --group cpu --group dev --frozen
 ```
 
 ### CUDA 12 GPU setup
 
 ```bash
-uv sync --group cuda12 --group dev
+uv sync --group cuda12 --group dev --frozen
 ```
 
 Dependency versions are controlled by `pyproject.toml` and locked in `uv.lock`.
