@@ -21,3 +21,8 @@ dist/
 
 # OS/editor
 .DS_Store
+
+# Generated simulation outputs
+artifacts/
+jax_backend/artifacts/
+jax_backend/sim_hist_*.npz
