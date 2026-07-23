@@ -6,13 +6,26 @@ from . import geometry as geo
 from . import default_sensory
 from . import get_observations
 
-def init_gen_process(key, init_dict):
+def init_gen_process(key, init_dict, error_key=None):
+
+  '''
+  key      : used to initialize agent positions and velocities (SEED_init)
+  error_key: used to initialize sensory and action noise (SEED_error).
+               If None, falls back to original behavior (splits from key).
+  '''
 
     # pull out relevant variables from initialization dict
     N, ns_x, ns_phi, ndo_x, ndo_phi = init_dict['N'], init_dict['ns_x'], init_dict['ns_phi'], init_dict['ndo_x'], init_dict['ndo_phi']
     sector_angles = init_dict['sector_angles']
 
-    pos_vel_init_key, noise_key_obs, noise_key_actions = random.split(key, 3)
+    if error_key is None:
+        # original behavior — backward compatible
+        pos_vel_init_key, noise_key_obs, noise_key_actions = random.split(key, 3)
+    else:
+        # new behavior — separate keys for init and noise
+        pos_vel_init_key = key                                    # SEED_init controls positions/velocities
+        noise_key_obs, noise_key_actions = random.split(error_key, 2)  # SEED_error controls both noise sources
+
 
     pos, vel = geo.initialize_positions_velocities(pos_vel_init_key, init_dict['N'], **init_dict['posvel_init'])
 

@@ -12,6 +12,7 @@ from genmodel import init_genmodel
 
 def run(
         init_key_num = 1, # number to initialize the jax random seed
+        error_key_num = None, # when no error_key is specified, assign None
         N = 30, # the number of agents to change per initialization
         T = 100, # how long the simulation should run for (in seconds)
         dt = 0.01, # the time step size for stochastic integration (in seconds)
@@ -27,13 +28,17 @@ def run(
 
     # set up some global parameters
     key = random.PRNGKey(init_key_num)
+    if error_key_num is None:
+        error_key = None  # falls back to original behavior
+    else:
+        error_key = random.PRNGKey(error_key_num)  # SEED_error
     init_dict = get_default_inits(N, T, dt, n_sectors=n_sectors, sector_angle=sector_angle)
     if init_dict_override is None:
         init_dict_override = {}
     init_dict = merge(init_dict, init_dict_override)
     
     # initialize generative model, generative process, and meta parameters related to learning and inference
-    pos, vel, genproc, new_key = init_gen_process(key, init_dict)
+    pos, vel, genproc, new_key = init_gen_process(key, init_dict, error_key=error_key)
     genmodel = init_genmodel(init_dict)
 
     if meta_params_override is None:
@@ -71,6 +76,9 @@ if __name__ == '__main__':
     parser.add_argument('--seed', '-s', type = int,
                 help = "key to initialize Jax random seed",
                 dest = "init_key_num", default=1)
+    parser.add_argument('--error_seed', '-es', type = int,
+                help = "Separate key to initialize observation and action noise",
+                dest = "error_key_num", default=None)
     parser.add_argument('--N', '-N', type = int,
                 help = "Number of agents",
                 dest = "N", default=30)   
@@ -148,7 +156,7 @@ if __name__ == '__main__':
     meta_params_override = {k:v for k,v in vars(args).items() if k in ['infer_lr', 'nsteps_infer', 'action_lr', 'nsteps_action', 'normalize_v']}
 
     # get all the remaining arguments as a dictionary
-    common_args = {k:v for k,v in vars(args).items() if k in ['init_key_num', 'N', 'T', 'dt', 'n_sectors', 'sector_angle', 'last_T_seconds', 'save']}
+    common_args = {k:v for k,v in vars(args).items() if k in ['init_key_num', 'error_key_num', 'N', 'T', 'dt', 'n_sectors', 'sector_angle', 'last_T_seconds', 'save']}
     
     run(**common_args, init_dict_override=init_dict_override, meta_params_override=meta_params_override)
 
