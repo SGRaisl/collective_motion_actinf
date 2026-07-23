@@ -78,7 +78,7 @@ if __name__ == '__main__':
                 dest = "init_key_num", default=1)
     parser.add_argument('--error_seed', '-es', type = int,
                 help = "Separate key to initialize observation and action noise",
-                dest = "error_key_num", default=None)
+                dest = "error_key_num", default=None, required=False)
     parser.add_argument('--N', '-N', type = int,
                 help = "Number of agents",
                 dest = "N", default=30)   
