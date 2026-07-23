@@ -8,11 +8,11 @@ from . import get_observations
 
 def init_gen_process(key, init_dict, error_key=None):
 
-  '''
-  key      : used to initialize agent positions and velocities (SEED_init)
-  error_key: used to initialize sensory and action noise (SEED_error).
+    """
+    key      : used to initialize agent positions and velocities (SEED_init)
+    error_key: used to initialize sensory and action noise (SEED_error).
                If None, falls back to original behavior (splits from key).
-  '''
+    """
 
     # pull out relevant variables from initialization dict
     N, ns_x, ns_phi, ndo_x, ndo_phi = init_dict['N'], init_dict['ns_x'], init_dict['ns_phi'], init_dict['ndo_x'], init_dict['ndo_phi']
