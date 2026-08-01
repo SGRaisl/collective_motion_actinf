@@ -407,10 +407,10 @@ def run_single_simulation(init_state, n_timesteps, genmodel, genproc, meta_param
     if learning:
         assert isinstance(learning_args, dict), "If you are using learning, must provide a dictionary containing dFdparam and param_mapping"
         # get single timestep function (learning version)
-        if random_neighbor:
-            single_timestep = make_single_timestep_fn_nolearning_random_neighbor(genproc, genmodel, meta_params)
-        else:
-            single_timestep = make_single_timestep_fn_nolearning(genproc, genmodel, meta_params)
+        single_timestep = make_single_timestep_fn(genproc, genmodel, learning_args['dFdparam'], learning_args['param_mapping'], meta_params)
+
+
+
 
         if returns == 'all':
             returns = ['pos', 'vel', 'mu', 'preparams', 'F']
@@ -440,7 +440,10 @@ def run_single_simulation(init_state, n_timesteps, genmodel, genproc, meta_param
         if learning_args is not None:
             print('Warning: although you have provided learning_args as a non-empty argument, it will be ignored because you also have set learning=False\n')
         # get single timestep function (no learning version)
-        single_timestep = make_single_timestep_fn_nolearning(genproc, genmodel, meta_params)
+        if random_neighbor:
+            single_timestep = make_single_timestep_fn_nolearning_random_neighbor(genproc, genmodel, meta_params)
+        else:
+            single_timestep = make_single_timestep_fn_nolearning(genproc, genmodel, meta_params)
 
         if returns == 'all':
             returns = ['pos', 'vel', 'mu', 'F']
