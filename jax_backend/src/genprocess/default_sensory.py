@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, Iterable, Tuple
 
 import jax.numpy as jnp
+from jax import random
 from . import geometry as geo
 
 array = jnp.ndarray
@@ -92,23 +93,29 @@ def get_observations_random_neighbor(pos: array, vel: array, genproc: Dict, t_id
 
     sector_key must be a fresh JAX PRNGKey — different each timestep so
     different neighbors are sampled at each step.
+
+    Empty sectors return nan from the random sampling functions.
+    We convert nan -> 0 before passing to sensory_samples_multi_order
+    so that the empty_sector_mask (which checks == 0) works correctly.
     """
 
     within_sector_idx, distance_matrix, n2n_vecs = geo.compute_visual_neighbours(
         pos, vel, genproc['R_starts'], genproc['R_ends'], genproc['dist_thr']
     )
 
-    # split sector_key into two independent sub-keys — one for h, one for hprime
-    # using the same key for both would correlate the selections
+    # split sector_key into two independent sub-keys
     h_key, hprime_key = random.split(sector_key, 2)
 
     # get h using random single-neighbor selection
+    # nan returned for empty sectors — convert to 0 for mask compatibility
     h = geo.compute_h_per_sector_random_neighbor(within_sector_idx, distance_matrix, h_key)
+    h = jnp.nan_to_num(h, nan=0.0)  # empty sectors -> 0 so mask detects them
 
-    # get hprime using the same selection logic (consistent with h)
+    # get hprime using consistent random selection
     hprime, all_dh_dr_self = geo.compute_hprime_per_sector_random_neighbor(
         within_sector_idx, pos, vel, n2n_vecs, hprime_key
     )
+    hprime = jnp.nan_to_num(hprime, nan=0.0)  # same treatment for hprime
 
     x_tilde_gp = [h, hprime]
 
@@ -121,7 +128,3 @@ def get_observations_random_neighbor(pos: array, vel: array, genproc: Dict, t_id
     )
 
     return phi, all_dh_dr_self, empty_sectors_mask
-
-
-
-
