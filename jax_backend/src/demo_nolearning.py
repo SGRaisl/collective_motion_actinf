@@ -21,7 +21,7 @@ def run(
         last_T_seconds = 10, # how long from the last timestep backwards, to plot 
         save = False, # whether to save the results as an npz file to disk
         init_dict_override = None, # dictionary of parameters to override the default initialization
-        meta_params_override = None # dictionary of parameters to override the default meta parameters
+        meta_params_override = None, # dictionary of parameters to override the default meta parameters
         random_neighbor = False # Assume no random neighbors if not included
         ):
 
