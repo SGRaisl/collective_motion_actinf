@@ -235,6 +235,142 @@ def compute_h_per_sector_keepNaNs(within_sector_idx, distance_matrix):
 
     return h_per_sector
 
+def compute_h_per_sector_random_neighbor(within_sector_idx, distance_matrix, sector_key):
+    """
+    For each sector of each focal agent, randomly select ONE neighbor and use
+    that neighbor's distance as the sector observation h.
+    Returns NaN for empty sectors (consistent with compute_h_per_sector_keepNaNs).
+
+    Parameters
+    ----------
+    within_sector_idx : (n_sectors, N, N) bool array
+        True where neighbor k is in sector s of focal agent j
+    distance_matrix : (N, N) float array
+        Pairwise distances between all agents
+    sector_key : jax PRNGKey
+        Random key for neighbor selection — should be different each timestep
+
+    Returns
+    -------
+    h_per_sector : (n_sectors, N) float array
+        Distance to one randomly selected neighbor per sector per agent.
+        NaN where sector is empty.
+    """
+    n_sectors, N, _ = within_sector_idx.shape
+
+    # split key into one sub-key per sector per focal agent
+    # shape of keys: (n_sectors, N, 2) — one key per (sector, focal_agent) pair
+    keys_flat = random.split(sector_key, n_sectors * N)
+    keys = keys_flat.reshape(n_sectors, N, 2)
+
+    def select_one_neighbor_for_agent(sector_mask_j, dist_row_j, key_j):
+        """
+        For a single focal agent j in a single sector:
+        sector_mask_j : (N,) bool — which neighbors are present
+        dist_row_j    : (N,) float — distances from j to all others
+        key_j         : PRNGKey
+
+        Returns the distance to a randomly chosen neighbor, or nan if empty.
+        """
+        n_neighbors = sector_mask_j.sum()
+        has_neighbors = n_neighbors > 0
+
+        # randomly sample one index from 0..N-1, weighted by sector_mask_j
+        # if sector is empty, the weights are all zero — we handle this with jnp.where
+        # use mask as weights: neighbors have weight 1, non-neighbors weight 0
+        # add a tiny uniform floor so random.choice never sees all-zero weights
+        weights = sector_mask_j.astype(jnp.float32)
+        weights_safe = jnp.where(has_neighbors, weights, jnp.ones(N))  # fallback to uniform if empty
+
+        chosen_idx = random.choice(key_j, N, shape=(), p=weights_safe / weights_safe.sum())
+        chosen_dist = dist_row_j[chosen_idx]
+
+        # return nan if sector was empty, chosen distance otherwise
+        return jnp.where(has_neighbors, chosen_dist, jnp.nan)
+
+    def select_for_sector(sector_mask_s, keys_s):
+        """
+        Applies select_one_neighbor_for_agent across all N focal agents
+        for a single sector s.
+        sector_mask_s : (N, N) — within_sector_idx[s]
+        keys_s        : (N, 2) — one key per focal agent
+        """
+        return vmap(select_one_neighbor_for_agent, (0, 0, 0))(
+            sector_mask_s,      # (N, N) → each row is one focal agent's sector mask
+            distance_matrix,    # (N, N) → each row is one focal agent's distances
+            keys_s              # (N, 2) → one key per focal agent
+        )
+
+    # vmap across sectors
+    h_per_sector = vmap(select_for_sector, (0, 0))(within_sector_idx, keys)
+    # shape: (n_sectors, N)
+
+    return h_per_sector
+
+
+def compute_hprime_per_sector_random_neighbor(within_sector_idx, pos, vel, n2n_vecs, sector_key):
+    """
+    Computes hprime using the SAME random neighbor selection logic as
+    compute_h_per_sector_random_neighbor, so that h and hprime refer to
+    the same neighbor.
+
+    Returns (hprime, all_dh_dr_self) with the same shapes as the original
+    compute_hprime_per_sector, so the rest of the pipeline is unchanged.
+    """
+    n_sectors, N, _ = within_sector_idx.shape
+
+    keys_flat = random.split(sector_key, n_sectors * N)
+    keys = keys_flat.reshape(n_sectors, N, 2)
+
+    def select_one_neighbor_idx(sector_mask_j, key_j):
+        """Returns the chosen neighbor index for agent j in one sector."""
+        has_neighbors = sector_mask_j.sum() > 0
+        weights = sector_mask_j.astype(jnp.float32)
+        weights_safe = jnp.where(has_neighbors, weights, jnp.ones(N))
+        chosen_idx = random.choice(key_j, N, shape=(), p=weights_safe / weights_safe.sum())
+        # if empty, return 0 (will be masked out anyway)
+        return jnp.where(has_neighbors, chosen_idx, 0).astype(jnp.int32)
+
+    def get_selected_idx_for_sector(sector_mask_s, keys_s):
+        """Returns chosen neighbor index for each focal agent in sector s. Shape: (N,)"""
+        return vmap(select_one_neighbor_idx, (0, 0))(sector_mask_s, keys_s)
+
+    # selected_idx[s, j] = index of the neighbor chosen for focal agent j in sector s
+    selected_idx = vmap(get_selected_idx_for_sector, (0, 0))(within_sector_idx, keys)
+    # shape: (n_sectors, N)
+
+    # build a one-hot within_sector mask that has exactly one True per (sector, focal_agent)
+    # shape: (n_sectors, N, N) — same as within_sector_idx but with only one neighbor selected
+    one_hot = jnp.zeros((n_sectors, N, N), dtype=bool)
+    sector_idx_grid = jnp.arange(n_sectors)[:, None]   # (n_sectors, 1)
+    focal_idx_grid  = jnp.arange(N)[None, :]           # (1, N)
+
+    # scatter True into the selected positions
+    one_hot = one_hot.at[sector_idx_grid, focal_idx_grid, selected_idx].set(True)
+
+    # zero out selections that came from empty sectors
+    has_neighbors = within_sector_idx.sum(axis=2) > 0   # (n_sectors, N)
+    one_hot = one_hot & has_neighbors[:, :, None]
+
+    # now use the standard hprime computation but with the one-hot mask
+    # this means all_dh_dr_others and sector_v only reference the selected neighbor
+    expanded_wsect_idx = one_hot[..., None]             # (n_sectors, N, N, 1)
+
+    sector_r = expanded_wsect_idx * n2n_vecs[None, ...]
+    sector_r = sector_r / jnp.linalg.norm(sector_r, axis=3, keepdims=True)
+    sector_r = remove_nans(sector_r)
+
+    # with one neighbor selected, sum over axis=2 just picks that neighbor's vector
+    all_dh_dr_others = sector_r / jnp.maximum(expanded_wsect_idx.sum(axis=2, keepdims=True), 1)
+    all_dh_dr_self   = -all_dh_dr_others.sum(axis=2)   # (n_sectors, N, 2)
+
+    sector_v = expanded_wsect_idx * vel[None, None, ...]
+
+    hprime = compute_hprime_vectorized(all_dh_dr_self, vel, all_dh_dr_others, sector_v)
+    hprime = remove_nans(hprime)
+
+    return hprime, all_dh_dr_self
+
 def compute_hprime_vectorized(all_dh_dr_self, vel, all_dh_dr_others, sector_v):
 
     self_component = (all_dh_dr_self * vel[None,...]).sum(-1) # sum out the last axis, computing the dot product of each focal agent's velocity vector with its dh_dr_self vector

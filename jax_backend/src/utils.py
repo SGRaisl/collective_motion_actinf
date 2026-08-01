@@ -12,7 +12,7 @@ import os
 import time
 import argparse
 
-from genprocess import get_observations, get_observations_special, advance_positions, init_gen_process, compute_Dgroup_and_rankings_t, compute_Dgroup_and_rankings_vmapped, compute_turning_magnitudes, compute_integrated_change_magnitude
+from genprocess import get_observations, get_observations_special, get_observations_random_neighbor, advance_positions, init_gen_process, compute_Dgroup_and_rankings_t, compute_Dgroup_and_rankings_vmapped, compute_turning_magnitudes, compute_integrated_change_magnitude
 from inference import run_inference
 from genmodel import compute_vfe_vectorized
 from action import infer_actions
@@ -81,6 +81,38 @@ def make_single_timestep_fn_nolearning(genproc, genmodel, meta_params):
 
         return pos_next, vel_next, mu_next, F
     
+    return single_timestep
+
+def make_single_timestep_fn_nolearning_random_neighbor(genproc, genmodel, meta_params):
+    """
+    Same as make_single_timestep_fn_nolearning but uses random single-neighbor
+    sampling for sensory observations instead of sector-averaging.
+    """
+
+    def single_timestep(pos, vel, mu, t_idx):
+
+        # get the pre-generated sector key for this timestep
+        sector_key = genproc['sector_keys'][t_idx]
+
+        # sample observations using random neighbor selection
+        phi, all_dh_dr_self, empty_sectors_mask = get_observations_random_neighbor(
+            pos, vel, genproc, t_idx, sector_key
+        )
+
+        infer_res, mu_traj = run_inference(phi, mu, empty_sectors_mask, genmodel,
+                                           **meta_params['inference_params'])
+        mu_next, epsilon_z = infer_res
+
+        F = compute_vfe_vectorized(mu_next, phi, empty_sectors_mask, genmodel)
+
+        vel_next = infer_actions(vel, epsilon_z, genmodel, all_dh_dr_self,
+                                 **meta_params['action_params'])
+
+        pos_next = advance_positions(pos, vel_next, genproc['action_noise'][t_idx],
+                                     dt=genproc['dt'])
+
+        return pos_next, vel_next, mu_next, F
+
     return single_timestep
 
 def initialize_meta_params(infer_lr = 0.1, nsteps_infer = 1, action_lr = 0.1, nsteps_action = 1, learning_lr = 0.001, nsteps_learning = 1, normalize_v = True):
@@ -369,13 +401,16 @@ def animate_trajectories_compare(r_list,
 
     return full_save_path
 
-def run_single_simulation(init_state, n_timesteps, genmodel, genproc, meta_params, returns = 'all', learning=False, learning_args=None):
+def run_single_simulation(init_state, n_timesteps, genmodel, genproc, meta_params, returns = 'all', learning=False, learning_args=None, random_neighbor=False):
     """ Wrapper function that runs a single realization of the active inference schooling simulation, with either learning or no-learning"""
 
     if learning:
         assert isinstance(learning_args, dict), "If you are using learning, must provide a dictionary containing dFdparam and param_mapping"
         # get single timestep function (learning version)
-        single_timestep = make_single_timestep_fn(genproc, genmodel, learning_args['dFdparam'], learning_args['param_mapping'], meta_params)
+        if random_neighbor:
+            single_timestep = make_single_timestep_fn_nolearning_random_neighbor(genproc, genmodel, meta_params)
+        else:
+            single_timestep = make_single_timestep_fn_nolearning(genproc, genmodel, meta_params)
 
         if returns == 'all':
             returns = ['pos', 'vel', 'mu', 'preparams', 'F']

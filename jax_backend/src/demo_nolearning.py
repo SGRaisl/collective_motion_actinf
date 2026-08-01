@@ -22,6 +22,7 @@ def run(
         save = False, # whether to save the results as an npz file to disk
         init_dict_override = None, # dictionary of parameters to override the default initialization
         meta_params_override = None # dictionary of parameters to override the default meta parameters
+        random_neighbor = False # Assume no random neighbors if not included
         ):
 
     seed_key = random.PRNGKey(init_key_num)
@@ -53,7 +54,7 @@ def run(
 
     vars2return = ['pos','vel'] if save else ['pos']
 
-    simulation_history = run_single_simulation(init_state, n_timesteps, genmodel, genproc, meta_params, returns = vars2return, learning=False)
+    simulation_history = run_single_simulation(init_state, n_timesteps, genmodel, genproc, meta_params, returns = vars2return, learning=False, random_neighbor=random_neighbor)
 
     if save:
         np.savez(f'sim_hist_key{init_key_num}.npz', r=simulation_history[0], v=simulation_history[1])
@@ -146,6 +147,12 @@ if __name__ == '__main__':
     parser.add_argument('--save', '-save', action = 'store_true',
                 help = "Whether to save the results as an npz file to disk",
                 dest = "save", default=False)
+    # add an argument to consider the random neighbor condition
+    parser.add_argument('--random_neighbor', '-rn', type=str2bool,
+            nargs='?', const=True,
+            help="If True, each agent randomly selects one neighbor per sector "
+                 "instead of averaging over all neighbors in the sector",
+            dest="random_neighbor", default=False)
 
     args = parser.parse_args()
 
@@ -156,7 +163,7 @@ if __name__ == '__main__':
     meta_params_override = {k:v for k,v in vars(args).items() if k in ['infer_lr', 'nsteps_infer', 'action_lr', 'nsteps_action', 'normalize_v']}
 
     # get all the remaining arguments as a dictionary
-    common_args = {k:v for k,v in vars(args).items() if k in ['init_key_num', 'error_key_num', 'N', 'T', 'dt', 'n_sectors', 'sector_angle', 'last_T_seconds', 'save']}
+    common_args = {k:v for k,v in vars(args).items() if k in ['init_key_num', 'error_key_num', 'N', 'T', 'dt', 'n_sectors', 'sector_angle', 'last_T_seconds', 'save', 'random_neighbor']}
     
     run(**common_args, init_dict_override=init_dict_override, meta_params_override=meta_params_override)
 

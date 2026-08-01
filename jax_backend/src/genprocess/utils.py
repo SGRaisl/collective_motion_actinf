@@ -50,6 +50,11 @@ def init_gen_process(key, init_dict, error_key=None):
 
     genproc['action_noise'] = init_dict['z_action'] * random.normal(noise_key_actions, shape = (len(genproc['t_axis']), N, 2))
 
+    # pre-generate one random key per timestep for random neighbor selection
+    # shape: (T, 2) — indexed as genproc['sector_keys'][t_idx] inside the loop
+    sector_key_base, _ = random.split(noise_key_actions)
+    genproc['sector_keys'] = random.split(sector_key_base, len(genproc['t_axis']))
+
     _, new_key = random.split(noise_key_actions)
     return pos, vel, genproc, new_key
 

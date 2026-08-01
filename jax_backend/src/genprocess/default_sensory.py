@@ -85,7 +85,42 @@ def get_observations_special(pos: array, vel: array, genproc: Dict, t_idx: int) 
 
     return phi, all_dh_dr_self, empty_sectors_mask
 
+def get_observations_random_neighbor(pos: array, vel: array, genproc: Dict, t_idx: int, sector_key) -> Tuple[array, array, array]:
+    """
+    Identical to get_observations but uses random single-neighbor sampling
+    instead of averaging over all neighbors in each sector.
 
+    sector_key must be a fresh JAX PRNGKey — different each timestep so
+    different neighbors are sampled at each step.
+    """
+
+    within_sector_idx, distance_matrix, n2n_vecs = geo.compute_visual_neighbours(
+        pos, vel, genproc['R_starts'], genproc['R_ends'], genproc['dist_thr']
+    )
+
+    # split sector_key into two independent sub-keys — one for h, one for hprime
+    # using the same key for both would correlate the selections
+    h_key, hprime_key = random.split(sector_key, 2)
+
+    # get h using random single-neighbor selection
+    h = geo.compute_h_per_sector_random_neighbor(within_sector_idx, distance_matrix, h_key)
+
+    # get hprime using the same selection logic (consistent with h)
+    hprime, all_dh_dr_self = geo.compute_hprime_per_sector_random_neighbor(
+        within_sector_idx, pos, vel, n2n_vecs, hprime_key
+    )
+
+    x_tilde_gp = [h, hprime]
+
+    phi, empty_sectors_mask = sensory_samples_multi_order(
+        x_tilde_gp,
+        genproc['sensory_noise'][t_idx],
+        genproc['sensory_transform'],
+        genproc['grad_sensory_transform'],
+        remove_zeros=True
+    )
+
+    return phi, all_dh_dr_self, empty_sectors_mask
 
 
 
