@@ -57,7 +57,7 @@ def run(
 
     if save:
         if error_key_num is not None:
-          np.savez(f'sim_hist_key{init_key_num}_{error_key_num}.npz', r=simulation_history[0], v=simulation_history[1])
+          np.savez(f'sim_hist_key_init{init_key_num}_error{error_key_num}.npz', r=simulation_history[0], v=simulation_history[1])
         else:
           np.savez(f'sim_hist_key{init_key_num}.npz', r=simulation_history[0], v=simulation_history[1])
     else:
